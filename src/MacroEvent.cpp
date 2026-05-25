@@ -11,6 +11,7 @@ QJsonObject MacroEvent::toJson() const {
     obj.insert("vkCode", static_cast<double>(vkCode));
     obj.insert("scanCode", static_cast<double>(scanCode));
     obj.insert("extended", extended);
+    obj.insert("randomDelayMaxMs", static_cast<double>(randomDelayMaxMs));
     return obj;
 }
 
@@ -25,5 +26,6 @@ MacroEvent MacroEvent::fromJson(const QJsonObject &obj) {
     e.vkCode = static_cast<quint32>(obj.value("vkCode").toDouble());
     e.scanCode = static_cast<quint32>(obj.value("scanCode").toDouble());
     e.extended = obj.value("extended").toBool();
+    e.randomDelayMaxMs = static_cast<quint32>(obj.value("randomDelayMaxMs").toDouble());
     return e;
 }

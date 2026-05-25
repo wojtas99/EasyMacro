@@ -119,11 +119,11 @@ bool MacroRecorder::handleKeyboard(int vk, int scan, bool extended, bool keyUp, 
         }
         return true;
     }
-    if (!m_recording) {
+    if (!m_recording || keyUp) {
         return false;
     }
     MacroEvent e;
-    e.type = keyUp ? MacroEventType::KeyUp : MacroEventType::KeyDown;
+    e.type = MacroEventType::KeyPress;
     e.delayMs = nextDelay();
     e.vkCode = static_cast<quint32>(vk);
     e.scanCode = static_cast<quint32>(scan);
@@ -134,7 +134,7 @@ bool MacroRecorder::handleKeyboard(int vk, int scan, bool extended, bool keyUp, 
 }
 
 void MacroRecorder::handleMouse(unsigned int message, int x, int y, int wheelDelta, bool injected) {
-    if (injected || !m_recording) {
+    if (injected || !m_recording || message == WM_MOUSEMOVE) {
         return;
     }
     MacroEvent e;
@@ -143,9 +143,6 @@ void MacroRecorder::handleMouse(unsigned int message, int x, int y, int wheelDel
     e.y = y;
     bool valid = true;
     switch (message) {
-        case WM_MOUSEMOVE:
-            e.type = MacroEventType::MouseMove;
-            break;
         case WM_LBUTTONDOWN:
             e.type = MacroEventType::MouseDown;
             e.button = MouseButton::Left;

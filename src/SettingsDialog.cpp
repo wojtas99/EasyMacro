@@ -56,8 +56,14 @@ SettingsDialog::SettingsDialog(const Settings &current, QWidget *parent) : QDial
     m_infiniteCheck = new QCheckBox(tr("Repeat infinitely"), this);
     m_infiniteCheck->setChecked(current.repeatInfinite());
 
+    m_speedCombo = new QComboBox(this);
+    m_speedCombo->addItem(tr("Recorded"), false);
+    m_speedCombo->addItem(tr("Instant"), true);
+    m_speedCombo->setCurrentIndex(current.instantSpeed() ? 1 : 0);
+
     auto *repeatGroup = new QGroupBox(tr("Playback"), this);
     auto *repeatForm = new QFormLayout(repeatGroup);
+    repeatForm->addRow(tr("Speed:"), m_speedCombo);
     repeatForm->addRow(tr("Repeat count:"), m_repeatSpin);
     repeatForm->addRow(QString(), m_infiniteCheck);
 
@@ -124,4 +130,8 @@ int SettingsDialog::repeatCount() const {
 
 bool SettingsDialog::repeatInfinite() const {
     return m_infiniteCheck->isChecked();
+}
+
+bool SettingsDialog::instantSpeed() const {
+    return m_speedCombo->currentData().toBool();
 }

@@ -8,10 +8,8 @@
 
 #include <QWidget>
 #include <QPushButton>
-#include <QLabel>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QGroupBox>
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
@@ -24,8 +22,12 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QVector>
-#include <QStringList>
 #include <QString>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QHeaderView>
+#include <QToolButton>
+#include <QFrame>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     setWindowTitle(tr("EasyMacro"));
@@ -35,7 +37,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     buildUi();
     buildMenu();
-
     applyHotkeys();
 
     connect(m_recorder, &MacroRecorder::eventRecorded, this, &MainWindow::onEventRecorded);
@@ -53,7 +54,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     }
 
     updateControls();
-    setStatus(tr("Idle"));
 }
 
 MainWindow::~MainWindow() {
@@ -66,68 +66,69 @@ MainWindow::~MainWindow() {
 
 void MainWindow::buildUi() {
     auto *central = new QWidget(this);
+    central->setContentsMargins(12, 10, 12, 12);
 
     m_recordButton = new QPushButton(tr("Record"), central);
-    m_playButton = new QPushButton(tr("Start / Stop"), central);
-    m_saveButton = new QPushButton(tr("Save"), central);
-    m_loadButton = new QPushButton(tr("Load"), central);
-    m_settingsButton = new QPushButton(tr("Settings"), central);
+    m_playButton = new QPushButton(tr("Play"), central);
+    m_clearButton = new QPushButton(tr("Clear List"), central);
+    m_recordButton->setFixedHeight(26);
+    m_playButton->setFixedHeight(26);
+    m_clearButton->setFixedHeight(26);
 
     auto *buttonRow = new QHBoxLayout();
+    buttonRow->setSpacing(8);
     buttonRow->addWidget(m_recordButton);
     buttonRow->addWidget(m_playButton);
-    buttonRow->addWidget(m_saveButton);
-    buttonRow->addWidget(m_loadButton);
-    buttonRow->addWidget(m_settingsButton);
+    buttonRow->addStretch(1);
+    buttonRow->addWidget(m_clearButton);
 
-    m_statusLabel = new QLabel(tr("Idle"), central);
-    m_eventCountLabel = new QLabel(tr("Events: 0"), central);
-    m_hotkeyLabel = new QLabel(central);
-
-    auto *statusGroup = new QGroupBox(tr("Status"), central);
-    auto *statusLayout = new QVBoxLayout(statusGroup);
-    statusLayout->addWidget(m_statusLabel);
-    statusLayout->addWidget(m_eventCountLabel);
-    statusLayout->addWidget(m_hotkeyLabel);
+    m_actionList = new QTableWidget(0, 4, central);
+    m_actionList->setHorizontalHeaderLabels({tr("#"), tr("Type"), tr("Delay (ms)"), tr("Del")});
+    m_actionList->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    m_actionList->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    m_actionList->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    m_actionList->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    m_actionList->setColumnWidth(0, 40);
+    m_actionList->setColumnWidth(2, 68);
+    m_actionList->setColumnWidth(3, 40);
+    m_actionList->verticalHeader()->setVisible(false);
+    m_actionList->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked);
+    m_actionList->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_actionList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_actionList->setAlternatingRowColors(true);
+    m_actionList->setShowGrid(false);
+    m_actionList->verticalHeader()->setDefaultSectionSize(28);
 
     auto *layout = new QVBoxLayout(central);
+    layout->setSpacing(10);
+    layout->addWidget(m_actionList);
     layout->addLayout(buttonRow);
-    layout->addWidget(statusGroup);
-    layout->addStretch(1);
 
     setCentralWidget(central);
 
     connect(m_recordButton, &QPushButton::clicked, this, &MainWindow::toggleRecording);
     connect(m_playButton, &QPushButton::clicked, this, &MainWindow::togglePlayback);
-    connect(m_saveButton, &QPushButton::clicked, this, &MainWindow::saveMacro);
-    connect(m_loadButton, &QPushButton::clicked, this, &MainWindow::loadMacro);
-    connect(m_settingsButton, &QPushButton::clicked, this, &MainWindow::openSettings);
+    connect(m_clearButton, &QPushButton::clicked, this, [this]() {
+        m_recorder->setEvents({});
+        onEventRecorded(0);
+        updateActionList();
+        updateControls();
+    });
+    connect(m_actionList, &QTableWidget::cellChanged, this, &MainWindow::onCellChanged);
 
-    resize(520, 240);
+    setFixedSize(300, 200);
 }
 
 void MainWindow::buildMenu() {
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
     fileMenu->addAction(tr("&Save..."), this, &MainWindow::saveMacro);
     fileMenu->addAction(tr("&Load..."), this, &MainWindow::loadMacro);
-    fileMenu->addAction(tr("Se&ttings..."), this, &MainWindow::openSettings);
     fileMenu->addSeparator();
-    fileMenu->addAction(tr("E&xit"), this, &QWidget::close);
-
-    QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
-    helpMenu->addAction(tr("&License"), this, &MainWindow::showLicense);
-    helpMenu->addAction(tr("&About"), this, &MainWindow::showAbout);
+    fileMenu->addAction(tr("Se&ttings..."), this, &MainWindow::openSettings);
 }
 
 void MainWindow::applyHotkeys() {
     m_recorder->setHotkeys(m_settings.runHotkeyVk(), m_settings.stopHotkeyVk(), m_settings.recordHotkeyVk());
-    const QString text = tr("Hotkeys - Run: %1   Stop: %2   Record: %3")
-                             .arg(vkName(m_settings.runHotkeyVk()))
-                             .arg(vkName(m_settings.stopHotkeyVk()))
-                             .arg(vkName(m_settings.recordHotkeyVk()));
-    if (m_hotkeyLabel != nullptr) {
-        m_hotkeyLabel->setText(text);
-    }
 }
 
 void MainWindow::toggleRecording() {
@@ -147,40 +148,32 @@ void MainWindow::togglePlayback() {
 }
 
 void MainWindow::startRecording() {
-    if (m_playing || m_recorder->isRecording()) {
-        return;
-    }
+    if (m_playing || m_recorder->isRecording()) return;
     m_recorder->startRecording();
     onEventRecorded(0);
-    setStatus(tr("Recording..."));
+    updateActionList();
     updateControls();
 }
 
 void MainWindow::stopRecording() {
-    if (!m_recorder->isRecording()) {
-        return;
-    }
+    if (!m_recorder->isRecording()) return;
     m_recorder->stopRecording();
-    setStatus(tr("Recorded %1 events").arg(m_recorder->eventCount()));
+    updateActionList();
     updateControls();
 }
 
 void MainWindow::startPlayback() {
-    if (m_playing || m_recorder->isRecording() || m_player->isRunning()) {
-        return;
-    }
+    if (m_playing || m_recorder->isRecording() || m_player->isRunning()) return;
     if (m_recorder->eventCount() == 0) {
         QMessageBox::information(this, tr("EasyMacro"), tr("Nothing to play. Record or load a macro first."));
         return;
     }
-    m_player->configure(m_recorder->events(), m_settings.repeatCount(), m_settings.repeatInfinite());
+    m_player->configure(m_recorder->events(), m_settings.repeatCount(), m_settings.repeatInfinite(), m_settings.instantSpeed());
     m_player->start();
 }
 
 void MainWindow::stopPlayback() {
-    if (!m_playing) {
-        return;
-    }
+    if (!m_playing) return;
     m_player->requestStop();
 }
 
@@ -191,14 +184,10 @@ void MainWindow::saveMacro() {
     }
     const QString path = QFileDialog::getSaveFileName(this, tr("Save Macro"), QString(),
                                                       tr("EasyMacro Files (*.emacro);;JSON Files (*.json)"));
-    if (path.isEmpty()) {
-        return;
-    }
+    if (path.isEmpty()) return;
 
     QJsonArray array;
-    for (const MacroEvent &e : m_recorder->events()) {
-        array.append(e.toJson());
-    }
+    for (const MacroEvent &e : m_recorder->events()) array.append(e.toJson());
     QJsonObject root;
     root.insert("version", 1);
     root.insert("events", array);
@@ -210,7 +199,6 @@ void MainWindow::saveMacro() {
     }
     file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
     file.close();
-    setStatus(tr("Saved %1 events").arg(m_recorder->eventCount()));
 }
 
 void MainWindow::loadMacro() {
@@ -220,9 +208,7 @@ void MainWindow::loadMacro() {
     }
     const QString path = QFileDialog::getOpenFileName(this, tr("Load Macro"), QString(),
                                                       tr("EasyMacro Files (*.emacro);;JSON Files (*.json)"));
-    if (path.isEmpty()) {
-        return;
-    }
+    if (path.isEmpty()) return;
 
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -243,13 +229,11 @@ void MainWindow::loadMacro() {
     QVector<MacroEvent> events;
     events.reserve(array.size());
     for (const QJsonValue &value : array) {
-        if (value.isObject()) {
-            events.append(MacroEvent::fromJson(value.toObject()));
-        }
+        if (value.isObject()) events.append(MacroEvent::fromJson(value.toObject()));
     }
     m_recorder->setEvents(events);
     onEventRecorded(events.size());
-    setStatus(tr("Loaded %1 events").arg(events.size()));
+    updateActionList();
     updateControls();
 }
 
@@ -259,14 +243,13 @@ void MainWindow::openSettings() {
         return;
     }
     SettingsDialog dialog(m_settings, this);
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
+    if (dialog.exec() != QDialog::Accepted) return;
     m_settings.setRunHotkeyVk(dialog.runHotkeyVk());
     m_settings.setStopHotkeyVk(dialog.stopHotkeyVk());
     m_settings.setRecordHotkeyVk(dialog.recordHotkeyVk());
     m_settings.setRepeatCount(dialog.repeatCount());
     m_settings.setRepeatInfinite(dialog.repeatInfinite());
+    m_settings.setInstantSpeed(dialog.instantSpeed());
     m_settings.save();
     applyHotkeys();
 }
@@ -276,79 +259,105 @@ void MainWindow::showLicense() {
     dialog.exec();
 }
 
-void MainWindow::showAbout() {
-    QMessageBox::about(this, tr("About EasyMacro"),
-                       tr("EasyMacro\n\nA simple mouse and keyboard macro recorder.\n"
-                          "Records your input and replays it on demand."));
+void MainWindow::removeAction(int row) {
+    QVector<MacroEvent> events = m_recorder->events();
+    if (row < 0 || row >= events.size()) return;
+    events.remove(row);
+    m_recorder->setEvents(events);
+    onEventRecorded(events.size());
+    updateActionList();
+}
+
+void MainWindow::updateActionList() {
+    m_actionList->blockSignals(true);
+    const QVector<MacroEvent> &events = m_recorder->events();
+    m_actionList->setRowCount(0);
+    for (int i = 0; i < events.size(); ++i) {
+        m_actionList->insertRow(i);
+
+        auto *numItem = new QTableWidgetItem(QString::number(i + 1));
+        numItem->setTextAlignment(Qt::AlignCenter);
+        numItem->setFlags(numItem->flags() & ~Qt::ItemIsEditable);
+        m_actionList->setItem(i, 0, numItem);
+
+        auto *typeItem = new QTableWidgetItem(eventLabel(events[i]));
+        typeItem->setFlags(typeItem->flags() & ~Qt::ItemIsEditable);
+        m_actionList->setItem(i, 1, typeItem);
+
+        auto *delayItem = new QTableWidgetItem(QString::number(events[i].randomDelayMaxMs));
+        delayItem->setTextAlignment(Qt::AlignCenter);
+        m_actionList->setItem(i, 2, delayItem);
+
+        auto *deleteBtn = new QToolButton();
+        deleteBtn->setText(QStringLiteral("✕"));
+        const int row = i;
+        connect(deleteBtn, &QToolButton::clicked, this, [this, row]() { removeAction(row); });
+        m_actionList->setCellWidget(i, 3, deleteBtn);
+    }
+    m_actionList->blockSignals(false);
+}
+
+void MainWindow::onCellChanged(int row, int col) {
+    if (col != 2) return;
+    QVector<MacroEvent> events = m_recorder->events();
+    if (row < 0 || row >= events.size()) return;
+    auto *item = m_actionList->item(row, col);
+    if (!item) return;
+    bool ok = false;
+    quint32 val = item->text().trimmed().toUInt(&ok);
+    if (!ok) val = 0;
+    if (val > 10000) val = 10000;
+    events[row].randomDelayMaxMs = val;
+    m_recorder->setEvents(events);
+    m_actionList->blockSignals(true);
+    item->setText(QString::number(val));
+    m_actionList->blockSignals(false);
 }
 
 void MainWindow::onRunHotkey() {
-    if (!m_playing && !m_recorder->isRecording()) {
-        startPlayback();
-    }
+    if (!m_playing && !m_recorder->isRecording()) startPlayback();
 }
 
 void MainWindow::onStopHotkey() {
-    if (m_recorder->isRecording()) {
-        stopRecording();
-    } else if (m_playing) {
-        stopPlayback();
-    }
+    if (m_recorder->isRecording()) stopRecording();
+    else if (m_playing) stopPlayback();
 }
 
 void MainWindow::onRecordHotkey() {
-    if (m_playing) {
-        return;
-    }
-    toggleRecording();
+    if (!m_playing) toggleRecording();
 }
 
 void MainWindow::onEventRecorded(int totalCount) {
-    m_eventCountLabel->setText(tr("Events: %1").arg(totalCount));
+    Q_UNUSED(totalCount)
 }
 
 void MainWindow::onPlaybackStarted() {
     m_playing = true;
-    setStatus(tr("Playing..."));
     updateControls();
 }
 
 void MainWindow::onPlaybackFinished() {
     m_playing = false;
-    setStatus(tr("Playback finished"));
     updateControls();
 }
 
 void MainWindow::onIterationChanged(int current, int total) {
-    if (total == 0) {
-        setStatus(tr("Playing... loop %1 (infinite)").arg(current));
-    } else {
-        setStatus(tr("Playing... loop %1 / %2").arg(current).arg(total));
-    }
+    Q_UNUSED(current)
+    Q_UNUSED(total)
 }
 
 void MainWindow::updateControls() {
     const bool recording = m_recorder->isRecording();
     m_recordButton->setText(recording ? tr("Stop Recording") : tr("Record"));
-    m_playButton->setText(m_playing ? tr("Stop") : tr("Start"));
-
+    m_playButton->setText(m_playing ? tr("Stop") : tr("Play"));
     m_recordButton->setEnabled(!m_playing);
     m_playButton->setEnabled(!recording);
-    m_saveButton->setEnabled(!recording && !m_playing);
-    m_loadButton->setEnabled(!recording && !m_playing);
-    m_settingsButton->setEnabled(!recording && !m_playing);
-}
-
-void MainWindow::setStatus(const QString &text) {
-    if (m_statusLabel != nullptr) {
-        m_statusLabel->setText(text);
-    }
+    m_clearButton->setEnabled(!recording && !m_playing);
+    m_actionList->setEnabled(!recording && !m_playing);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
-    if (m_recorder->isRecording()) {
-        m_recorder->stopRecording();
-    }
+    if (m_recorder->isRecording()) m_recorder->stopRecording();
     if (m_player->isRunning()) {
         m_player->requestStop();
         m_player->wait();
@@ -358,8 +367,80 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 }
 
 QString MainWindow::vkName(int vk) {
-    if (vk >= 0x70 && vk <= 0x7B) {
+    if (vk >= 0x70 && vk <= 0x7B)
         return QStringLiteral("F%1").arg(vk - 0x70 + 1);
-    }
     return QStringLiteral("0x%1").arg(vk, 0, 16);
+}
+
+QString MainWindow::vkKeyName(quint32 vk) {
+    switch (vk) {
+        case 0x08: return QStringLiteral("Backspace");
+        case 0x09: return QStringLiteral("Tab");
+        case 0x0D: return QStringLiteral("Enter");
+        case 0x10: return QStringLiteral("Shift");
+        case 0x11: return QStringLiteral("Ctrl");
+        case 0x12: return QStringLiteral("Alt");
+        case 0x13: return QStringLiteral("Pause");
+        case 0x14: return QStringLiteral("CapsLock");
+        case 0x1B: return QStringLiteral("Escape");
+        case 0x20: return QStringLiteral("Space");
+        case 0x21: return QStringLiteral("Page Up");
+        case 0x22: return QStringLiteral("Page Down");
+        case 0x23: return QStringLiteral("End");
+        case 0x24: return QStringLiteral("Home");
+        case 0x25: return QStringLiteral("← Left");
+        case 0x26: return QStringLiteral("↑ Up");
+        case 0x27: return QStringLiteral("→ Right");
+        case 0x28: return QStringLiteral("↓ Down");
+        case 0x2D: return QStringLiteral("Insert");
+        case 0x2E: return QStringLiteral("Delete");
+        case 0x5B: return QStringLiteral("Win");
+        case 0x90: return QStringLiteral("NumLock");
+        case 0x91: return QStringLiteral("ScrollLock");
+        case 0xA0: return QStringLiteral("L-Shift");
+        case 0xA1: return QStringLiteral("R-Shift");
+        case 0xA2: return QStringLiteral("L-Ctrl");
+        case 0xA3: return QStringLiteral("R-Ctrl");
+        case 0xA4: return QStringLiteral("L-Alt");
+        case 0xA5: return QStringLiteral("R-Alt");
+        case 0xBA: return QStringLiteral(";");
+        case 0xBB: return QStringLiteral("=");
+        case 0xBC: return QStringLiteral(",");
+        case 0xBD: return QStringLiteral("-");
+        case 0xBE: return QStringLiteral(".");
+        case 0xBF: return QStringLiteral("/");
+        case 0xC0: return QStringLiteral("`");
+        case 0xDB: return QStringLiteral("[");
+        case 0xDC: return QStringLiteral("\\");
+        case 0xDD: return QStringLiteral("]");
+        case 0xDE: return QStringLiteral("'");
+        default:
+            if (vk >= 0x30 && vk <= 0x39) return QString(QChar(vk));
+            if (vk >= 0x41 && vk <= 0x5A) return QString(QChar(vk));
+            if (vk >= 0x60 && vk <= 0x69) return QStringLiteral("Num%1").arg(vk - 0x60);
+            if (vk >= 0x70 && vk <= 0x7B) return QStringLiteral("F%1").arg(vk - 0x70 + 1);
+            return QStringLiteral("0x%1").arg(vk, 2, 16, QChar('0')).toUpper();
+    }
+}
+
+QString MainWindow::buttonName(MouseButton btn) {
+    switch (btn) {
+        case MouseButton::Left:   return QStringLiteral("Left");
+        case MouseButton::Right:  return QStringLiteral("Right");
+        case MouseButton::Middle: return QStringLiteral("Middle");
+        default:                  return QStringLiteral("Unknown");
+    }
+}
+
+QString MainWindow::eventLabel(const MacroEvent &e) {
+    switch (e.type) {
+        case MacroEventType::MouseMove:  return QStringLiteral("Mouse Move");
+        case MacroEventType::MouseDown:  return QStringLiteral("Mouse Down  %1").arg(buttonName(e.button));
+        case MacroEventType::MouseUp:    return QStringLiteral("Mouse Up  %1").arg(buttonName(e.button));
+        case MacroEventType::MouseWheel: return QStringLiteral("Mouse Wheel  Δ%1").arg(e.wheelDelta);
+        case MacroEventType::KeyDown:    return QStringLiteral("Key Down  %1").arg(vkKeyName(e.vkCode));
+        case MacroEventType::KeyUp:      return QStringLiteral("Key Up  %1").arg(vkKeyName(e.vkCode));
+        case MacroEventType::KeyPress:   return QStringLiteral("Key Press  %1").arg(vkKeyName(e.vkCode));
+        default:                          return QString();
+    }
 }

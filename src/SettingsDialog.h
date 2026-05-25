@@ -18,6 +18,7 @@ public:
     int recordHotkeyVk() const;
     int repeatCount() const;
     bool repeatInfinite() const;
+    bool instantSpeed() const;
 
 private slots:
     void onInfiniteToggled(bool checked);
@@ -32,6 +33,7 @@ private:
     QComboBox *m_recordCombo = nullptr;
     QSpinBox *m_repeatSpin = nullptr;
     QCheckBox *m_infiniteCheck = nullptr;
+    QComboBox *m_speedCombo = nullptr;
 };
 
 #endif

@@ -13,6 +13,7 @@ void Settings::load() {
     m_recordVk = store.value("hotkeys/record", 0x72).toInt();
     m_repeatCount = store.value("playback/repeatCount", 1).toInt();
     m_infinite = store.value("playback/infinite", false).toBool();
+    m_instantSpeed = store.value("playback/instantSpeed", false).toBool();
     if (m_repeatCount < 1) {
         m_repeatCount = 1;
     }
@@ -25,4 +26,5 @@ void Settings::save() const {
     store.setValue("hotkeys/record", m_recordVk);
     store.setValue("playback/repeatCount", m_repeatCount);
     store.setValue("playback/infinite", m_infinite);
+    store.setValue("playback/instantSpeed", m_instantSpeed);
 }

@@ -13,6 +13,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 
 add_executable(EasyMacro WIN32
         main.cpp
+        app.rc
         src/MacroEvent.h
         src/MacroEvent.cpp
         src/MacroRecorder.h

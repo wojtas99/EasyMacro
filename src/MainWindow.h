@@ -3,9 +3,10 @@
 
 #include <QMainWindow>
 #include "Settings.h"
+#include "MacroEvent.h"
 
 class QPushButton;
-class QLabel;
+class QTableWidget;
 class QCloseEvent;
 class MacroRecorder;
 class MacroPlayer;
@@ -26,7 +27,8 @@ private slots:
     void loadMacro();
     void openSettings();
     void showLicense();
-    void showAbout();
+    void removeAction(int row);
+    void onCellChanged(int row, int col);
 
     void onRunHotkey();
     void onStopHotkey();
@@ -46,8 +48,11 @@ private:
     void startPlayback();
     void stopPlayback();
     void updateControls();
-    void setStatus(const QString &text);
+    void updateActionList();
     static QString vkName(int vk);
+    static QString eventLabel(const MacroEvent &e);
+    static QString buttonName(MouseButton btn);
+    static QString vkKeyName(quint32 vk);
 
     Settings m_settings;
     MacroRecorder *m_recorder = nullptr;
@@ -55,13 +60,8 @@ private:
 
     QPushButton *m_recordButton = nullptr;
     QPushButton *m_playButton = nullptr;
-    QPushButton *m_saveButton = nullptr;
-    QPushButton *m_loadButton = nullptr;
-    QPushButton *m_settingsButton = nullptr;
-
-    QLabel *m_statusLabel = nullptr;
-    QLabel *m_eventCountLabel = nullptr;
-    QLabel *m_hotkeyLabel = nullptr;
+    QPushButton *m_clearButton = nullptr;
+    QTableWidget *m_actionList = nullptr;
 
     bool m_playing = false;
 };

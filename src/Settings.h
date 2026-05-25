@@ -10,12 +10,14 @@ public:
     int recordHotkeyVk() const { return m_recordVk; }
     int repeatCount() const { return m_repeatCount; }
     bool repeatInfinite() const { return m_infinite; }
+    bool instantSpeed() const { return m_instantSpeed; }
 
     void setRunHotkeyVk(int vk) { m_runVk = vk; }
     void setStopHotkeyVk(int vk) { m_stopVk = vk; }
     void setRecordHotkeyVk(int vk) { m_recordVk = vk; }
     void setRepeatCount(int count) { m_repeatCount = count; }
     void setRepeatInfinite(bool infinite) { m_infinite = infinite; }
+    void setInstantSpeed(bool instant) { m_instantSpeed = instant; }
 
     void load();
     void save() const;
@@ -26,6 +28,7 @@ private:
     int m_recordVk = 0x72;
     int m_repeatCount = 1;
     bool m_infinite = false;
+    bool m_instantSpeed = false;
 };
 
 #endif

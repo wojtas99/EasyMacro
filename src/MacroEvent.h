@@ -10,7 +10,8 @@ enum class MacroEventType {
     MouseUp = 2,
     MouseWheel = 3,
     KeyDown = 4,
-    KeyUp = 5
+    KeyUp = 5,
+    KeyPress = 6
 };
 
 enum class MouseButton {
@@ -30,6 +31,7 @@ struct MacroEvent {
     quint32 vkCode = 0;
     quint32 scanCode = 0;
     bool extended = false;
+    quint32 randomDelayMaxMs = 0;
 
     QJsonObject toJson() const;
     static MacroEvent fromJson(const QJsonObject &obj);

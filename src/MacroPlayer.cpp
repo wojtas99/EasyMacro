@@ -1,4 +1,5 @@
 #include "MacroPlayer.h"
+#include <QRandomGenerator>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -16,10 +17,11 @@ MacroPlayer::~MacroPlayer() {
     wait();
 }
 
-void MacroPlayer::configure(const QVector<MacroEvent> &events, int repeatCount, bool infinite) {
+void MacroPlayer::configure(const QVector<MacroEvent> &events, int repeatCount, bool infinite, bool instant) {
     m_events = events;
     m_repeatCount = repeatCount < 1 ? 1 : repeatCount;
     m_infinite = infinite;
+    m_instant = instant;
 }
 
 void MacroPlayer::requestStop() {
@@ -55,10 +57,17 @@ void MacroPlayer::run() {
             if (m_stop.load()) {
                 break;
             }
-            if (!interruptibleSleep(e.delayMs)) {
+            if (!m_instant && !interruptibleSleep(e.delayMs)) {
                 break;
             }
+            if (m_stop.load()) break;
             playEvent(e);
+            if (e.randomDelayMaxMs > 0) {
+                const quint32 extra = QRandomGenerator::global()->bounded(e.randomDelayMaxMs + 1);
+                if (!interruptibleSleep(extra)) {
+                    break;
+                }
+            }
         }
     }
 
@@ -122,15 +131,22 @@ void MacroPlayer::playEvent(const MacroEvent &e) {
             input.type = INPUT_KEYBOARD;
             input.ki.wVk = static_cast<WORD>(e.vkCode);
             input.ki.wScan = static_cast<WORD>(e.scanCode);
-            DWORD flags = 0;
-            if (e.extended) {
-                flags |= KEYEVENTF_EXTENDEDKEY;
-            }
-            if (e.type == MacroEventType::KeyUp) {
-                flags |= KEYEVENTF_KEYUP;
-            }
+            DWORD flags = e.extended ? KEYEVENTF_EXTENDEDKEY : 0;
+            if (e.type == MacroEventType::KeyUp) flags |= KEYEVENTF_KEYUP;
             input.ki.dwFlags = flags;
             SendInput(1, &input, sizeof(INPUT));
+            break;
+        }
+        case MacroEventType::KeyPress: {
+            input.type = INPUT_KEYBOARD;
+            input.ki.wVk = static_cast<WORD>(e.vkCode);
+            input.ki.wScan = static_cast<WORD>(e.scanCode);
+            const DWORD baseFlags = e.extended ? KEYEVENTF_EXTENDEDKEY : 0;
+            input.ki.dwFlags = baseFlags;
+            SendInput(1, &input, sizeof(INPUT));
+            INPUT up = input;
+            up.ki.dwFlags = baseFlags | KEYEVENTF_KEYUP;
+            SendInput(1, &up, sizeof(INPUT));
             break;
         }
     }

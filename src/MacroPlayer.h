@@ -12,7 +12,7 @@ public:
     explicit MacroPlayer(QObject *parent = nullptr);
     ~MacroPlayer() override;
 
-    void configure(const QVector<MacroEvent> &events, int repeatCount, bool infinite);
+    void configure(const QVector<MacroEvent> &events, int repeatCount, bool infinite, bool instant = false);
     void requestStop();
 
 signals:
@@ -30,6 +30,7 @@ private:
     QVector<MacroEvent> m_events;
     int m_repeatCount = 1;
     bool m_infinite = false;
+    bool m_instant = false;
     std::atomic<bool> m_stop{false};
 };
 
