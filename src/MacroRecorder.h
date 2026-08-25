@@ -36,7 +36,7 @@ signals:
     void eventRecorded(int totalCount);
 
 private:
-    quint32 nextDelay();
+    quint32 nextTimestamp();
 
     void *m_keyboardHook = nullptr;
     void *m_mouseHook = nullptr;

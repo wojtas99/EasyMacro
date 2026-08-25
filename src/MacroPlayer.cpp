@@ -1,4 +1,5 @@
 #include "MacroPlayer.h"
+#include <QElapsedTimer>
 #include <QRandomGenerator>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -29,14 +30,14 @@ void MacroPlayer::requestStop() {
 }
 
 bool MacroPlayer::interruptibleSleep(quint32 ms) {
-    quint32 remaining = ms;
-    while (remaining > 0) {
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < ms) {
         if (m_stop.load()) {
             return false;
         }
-        const quint32 chunk = remaining > 20 ? 20 : remaining;
-        QThread::msleep(chunk);
-        remaining -= chunk;
+        const qint64 remaining = static_cast<qint64>(ms) - timer.elapsed();
+        QThread::msleep(static_cast<unsigned long>(remaining > 20 ? 20 : remaining));
     }
     return !m_stop.load();
 }
@@ -53,11 +54,14 @@ void MacroPlayer::run() {
         }
         ++iteration;
         emit iterationChanged(iteration, total);
+        QElapsedTimer timer;
+        timer.start();
         for (const MacroEvent &e : m_events) {
             if (m_stop.load()) {
                 break;
             }
-            if (!m_instant && !interruptibleSleep(e.delayMs)) {
+            const qint64 remaining = static_cast<qint64>(e.timestampMs) - timer.elapsed();
+            if (!m_instant && remaining > 0 && !interruptibleSleep(static_cast<quint32>(remaining))) {
                 break;
             }
             if (m_stop.load()) break;

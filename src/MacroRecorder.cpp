@@ -93,14 +93,9 @@ void MacroRecorder::setHotkeys(int runVk, int stopVk, int recordVk) {
     m_recordVk = recordVk;
 }
 
-quint32 MacroRecorder::nextDelay() {
+quint32 MacroRecorder::nextTimestamp() {
     const qint64 now = m_timer.elapsed();
-    qint64 delay = now - m_lastTimestamp;
-    if (delay < 0) {
-        delay = 0;
-    }
-    m_lastTimestamp = now;
-    return static_cast<quint32>(delay);
+    return static_cast<quint32>(now < 0 ? 0 : now);
 }
 
 bool MacroRecorder::handleKeyboard(int vk, int scan, bool extended, bool keyUp, bool injected) {
@@ -124,7 +119,9 @@ bool MacroRecorder::handleKeyboard(int vk, int scan, bool extended, bool keyUp, 
     }
     MacroEvent e;
     e.type = MacroEventType::KeyPress;
-    e.delayMs = nextDelay();
+    e.timestampMs = nextTimestamp();
+    e.delayMs = e.timestampMs - static_cast<quint32>(m_lastTimestamp);
+    m_lastTimestamp = e.timestampMs;
     e.vkCode = static_cast<quint32>(vk);
     e.scanCode = static_cast<quint32>(scan);
     e.extended = extended;
@@ -138,7 +135,9 @@ void MacroRecorder::handleMouse(unsigned int message, int x, int y, int wheelDel
         return;
     }
     MacroEvent e;
-    e.delayMs = nextDelay();
+    e.timestampMs = nextTimestamp();
+    e.delayMs = e.timestampMs - static_cast<quint32>(m_lastTimestamp);
+    m_lastTimestamp = e.timestampMs;
     e.x = x;
     e.y = y;
     bool valid = true;

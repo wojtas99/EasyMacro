@@ -82,15 +82,17 @@ void MainWindow::buildUi() {
     buttonRow->addStretch(1);
     buttonRow->addWidget(m_clearButton);
 
-    m_actionList = new QTableWidget(0, 4, central);
-    m_actionList->setHorizontalHeaderLabels({tr("#"), tr("Type"), tr("Delay (ms)"), tr("Del")});
+    m_actionList = new QTableWidget(0, 5, central);
+    m_actionList->setHorizontalHeaderLabels({tr("#"), tr("Type"), tr("Time (ms)"), tr("Random (ms)"), tr("Del")});
     m_actionList->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
     m_actionList->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     m_actionList->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
     m_actionList->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    m_actionList->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
     m_actionList->setColumnWidth(0, 40);
-    m_actionList->setColumnWidth(2, 68);
-    m_actionList->setColumnWidth(3, 40);
+    m_actionList->setColumnWidth(2, 76);
+    m_actionList->setColumnWidth(3, 86);
+    m_actionList->setColumnWidth(4, 40);
     m_actionList->verticalHeader()->setVisible(false);
     m_actionList->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked);
     m_actionList->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -116,7 +118,7 @@ void MainWindow::buildUi() {
     });
     connect(m_actionList, &QTableWidget::cellChanged, this, &MainWindow::onCellChanged);
 
-    setFixedSize(300, 200);
+    //setFixedSize(410, 200);
 }
 
 void MainWindow::buildMenu() {
@@ -227,9 +229,17 @@ void MainWindow::loadMacro() {
 
     const QJsonArray array = doc.object().value("events").toArray();
     QVector<MacroEvent> events;
+    quint32 previousTimestamp = 0;
     events.reserve(array.size());
     for (const QJsonValue &value : array) {
-        if (value.isObject()) events.append(MacroEvent::fromJson(value.toObject()));
+        if (!value.isObject()) continue;
+        const QJsonObject object = value.toObject();
+        MacroEvent event = MacroEvent::fromJson(object);
+        if (!object.contains("timestampMs")) {
+            event.timestampMs = previousTimestamp + event.delayMs;
+        }
+        previousTimestamp = event.timestampMs;
+        events.append(event);
     }
     m_recorder->setEvents(events);
     onEventRecorded(events.size());
@@ -284,21 +294,25 @@ void MainWindow::updateActionList() {
         typeItem->setFlags(typeItem->flags() & ~Qt::ItemIsEditable);
         m_actionList->setItem(i, 1, typeItem);
 
+        auto *timeItem = new QTableWidgetItem(QString::number(events[i].timestampMs));
+        timeItem->setTextAlignment(Qt::AlignCenter);
+        m_actionList->setItem(i, 2, timeItem);
+
         auto *delayItem = new QTableWidgetItem(QString::number(events[i].randomDelayMaxMs));
         delayItem->setTextAlignment(Qt::AlignCenter);
-        m_actionList->setItem(i, 2, delayItem);
+        m_actionList->setItem(i, 3, delayItem);
 
         auto *deleteBtn = new QToolButton();
         deleteBtn->setText(QStringLiteral("✕"));
         const int row = i;
         connect(deleteBtn, &QToolButton::clicked, this, [this, row]() { removeAction(row); });
-        m_actionList->setCellWidget(i, 3, deleteBtn);
+        m_actionList->setCellWidget(i, 4, deleteBtn);
     }
     m_actionList->blockSignals(false);
 }
 
 void MainWindow::onCellChanged(int row, int col) {
-    if (col != 2) return;
+    if (col != 2 && col != 3) return;
     QVector<MacroEvent> events = m_recorder->events();
     if (row < 0 || row >= events.size()) return;
     auto *item = m_actionList->item(row, col);
@@ -306,12 +320,25 @@ void MainWindow::onCellChanged(int row, int col) {
     bool ok = false;
     quint32 val = item->text().trimmed().toUInt(&ok);
     if (!ok) val = 0;
-    if (val > 10000) val = 10000;
-    events[row].randomDelayMaxMs = val;
+    if (col == 2) {
+        const quint32 minimum = row > 0 ? events[row - 1].timestampMs : 0;
+        if (val < minimum) val = minimum;
+        const qint64 offset = static_cast<qint64>(val) - events[row].timestampMs;
+        for (int i = row; i < events.size(); ++i) {
+            const qint64 timestamp = static_cast<qint64>(events[i].timestampMs) + offset;
+            events[i].timestampMs = static_cast<quint32>(timestamp < val ? val : timestamp);
+        }
+        quint32 previousTimestamp = 0;
+        for (MacroEvent &event : events) {
+            event.delayMs = event.timestampMs - previousTimestamp;
+            previousTimestamp = event.timestampMs;
+        }
+    } else {
+        if (val > 10000) val = 10000;
+        events[row].randomDelayMaxMs = val;
+    }
     m_recorder->setEvents(events);
-    m_actionList->blockSignals(true);
-    item->setText(QString::number(val));
-    m_actionList->blockSignals(false);
+    updateActionList();
 }
 
 void MainWindow::onRunHotkey() {

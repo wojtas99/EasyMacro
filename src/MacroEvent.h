@@ -24,6 +24,7 @@ enum class MouseButton {
 struct MacroEvent {
     MacroEventType type = MacroEventType::MouseMove;
     quint32 delayMs = 0;
+    quint32 timestampMs = 0;
     int x = 0;
     int y = 0;
     MouseButton button = MouseButton::None;
